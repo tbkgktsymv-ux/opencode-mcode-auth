@@ -33,7 +33,7 @@ Every request is signed with the account's OAuth access token; on a 401 the plug
 ## 安装 / Install
 
 ```sh
-magpie plugin add <本仓库地址>      # 例如 magpie plugin add github:owner/opencode-mcode-auth
+magpie plugin add github:tbkgktsymv-ux/opencode-mcode-auth
 magpie plugin login mcode          # 选择一种登录方式
 ```
 
