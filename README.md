@@ -2,23 +2,65 @@
 
 **MiniMax M3.1 其实很能打，只是没人把它接出来。**
 
-MiniMax Code 订阅里的 M3.1 / M3.1-Flash-Preview（512K 上下文、支持推理）被低估得厉害：同样一道题，它的表现经常能跟上第一梯队的旗舰，而大家还在讨论 GPT 和 Claude。这个插件做的事情很简单——把 MiniMax Code 订阅接入 [magpie](https://github.com/yetone/magpie)，让 M3.1 出现在你所有 agent（Codex、Claude Code、WorkBuddy、OpenCode…）的模型列表里，随手就能选、随手就能比。
+MiniMax Code 订阅里的 M3.1 / M3.1-Flash-Preview（512K 上下文、支持推理）被低估得厉害：日常 agent 干活的表现经常能跟上第一梯队的旗舰。这个插件把 MiniMax Code 订阅接入 [magpie](https://github.com/yetone/magpie)，让 M3.1 出现在你所有 agent（Codex、Claude Code、WorkBuddy、OpenCode…）的模型列表里，随手就能选、随手就能比。
 
-An OpenCode provider plugin that plugs your **MiniMax Code** subscription into [magpie](https://github.com/yetone/magpie). Sign in once with the MiniMax Code desktop account (or a MiniMax account via browser), and every model your plan serves — `mcode/MiniMax-M3`, `mcode/MiniMax-M3.1-Flash-Preview`, … — shows up in any agent behind the magpie gateway (Codex, Claude Code, WorkBuddy, OpenCode, …).
+**Why this exists:** MiniMax's M3.1 family is one of the most underrated models out there — 512K context with solid reasoning. But the MiniMax ecosystem is thin on integrations: nobody has wired it into the routing layer the way DeepSeek and GLM got. This plugin is a working bridge from your existing subscription to any agent, powered by [magpie](https://github.com/yetone/magpie).
 
-**Why this exists:** MiniMax's M3.1 family is one of the most underrated models out there — 512K context with solid reasoning, and in day-to-day agent work it holds its own against much hyped frontier models. But the MiniMax ecosystem is thin on quality integrations: nobody has wired it into the routing layer the way DeepSeek, GLM and others got. This plugin is a first step — a working, maintainable bridge from your existing subscription to any agent, powered by magpie.
+## 在 magpie 中使用 / Using it in magpie
+
+**1. 安装插件并登录**（二选一，认的是同一个账号）：
+
+```sh
+magpie plugin add github:tbkgktsymv-ux/opencode-mcode-auth
+
+# 方式一：沿用 MiniMax Code 桌面端已登录的账号（推荐，token 自动续期）
+magpie plugin login mcode
+
+# 方式二：网页登录（没有桌面端时用，magpie 自动打开登录页）
+magpie plugin login mcode mcode
+```
+
+**2. 把 M3.1 选给任意 agent**：
+
+```sh
+# 命令行
+magpie codex mcode/MiniMax-M3.1-Flash-Preview        # Codex 用 M3.1
+magpie claude mcode/MiniMax-M3                        # Claude Code 用 M3
+magpie models                                         # 看所有 agent 能选到的模型
+
+# 或在 magpie 窗口里：插件 tab → MiniMax Code → 勾选模型（M3.1-Flash-Preview 等），
+# 然后在对应 agent 的模型下拉里选 mcode/MiniMax-M3.1-Flash-Preview
+```
+
+**3. 按需调上下文窗口和推理档位**：
+
+```sh
+# 上下文窗口（默认 256K，也可指定 128K / 1M 等）
+magpie model context mcode/MiniMax-M3.1-Flash-Preview 1m
+
+# 推理档位（high / xhigh / max）
+magpie codex effort high
+```
+
+**4. 看额度**：magpie 的账号列表（`magpie accounts` 或界面右上角）会显示**周额度用量**和重置时间，数据与 MiniMax Code 桌面端同源；额度将尽时 magpie 会按账号顺序自动切换。
+
+```sh
+magpie accounts          # 所有订阅的额度和重置时间
+magpie accounts add mcode   # 再加一个账号（可选）
+```
+
+**5. 进阶**：和别的模型组路由组、设 fallback——
+
+```sh
+magpie group add m31 models=mcode/MiniMax-M3.1-Flash-Preview,mcode/MiniMax-M3 routing=order
+magpie provider fallback mcode deepseek/deepseek-chat
+```
 
 ## 模型 / Models
 
 模型按 `mcode/<模型名>` 命名，例如 `mcode/MiniMax-M3`、`mcode/MiniMax-M3.1-Flash-Preview`。插件优先从 MiniMax Code 的本地配置（`~/.minimax/config.yaml`）读取当前订阅提供的模型及上下文/输出上限；读不到时使用内置的 MiniMax 原生模型表。
 
 Models are named `mcode/<model>`. The plugin reads the plan's models and limits from the MiniMax Code local config (`~/.minimax/config.yaml`) first, falling back to a built-in table of the native MiniMax models.
-
-## 额度显示 / Quota
-
-magpie 的账号列表会直接显示订阅的**周额度用量**（数据来自 MiniMax 官方 token-plan 接口，与桌面端显示同源），额度将尽时心里有数。
-
-The account list in magpie shows your **weekly quota usage** live (from MiniMax's official token-plan API, the same source the desktop app reads), so you always know how much plan is left.
 
 ## 登录方式 / Sign-in methods
 
@@ -43,15 +85,6 @@ POST https://agent.minimax.io/mavis/api/v1/llm/v1/messages      (en)
 `Authorization: Bearer mmoat_…`。插件的 `fetch` 为每个请求签名、把 URL 归一到网关实际路由的路径，401 时自动续期一次并重试。
 
 Every request is signed with the account's OAuth access token; on a 401 the plugin renews the token once and retries.
-
-## 安装 / Install
-
-需要 [magpie](https://github.com/yetone/magpie)：
-
-```sh
-magpie plugin add github:tbkgktsymv-ux/opencode-mcode-auth
-magpie plugin login mcode          # 选择一种登录方式
-```
 
 ## 许可 / License
 
