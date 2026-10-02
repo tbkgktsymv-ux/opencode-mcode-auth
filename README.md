@@ -6,55 +6,39 @@ MiniMax Code 订阅里的 M3.1 / M3.1-Flash-Preview（512K 上下文、支持推
 
 **Why this exists:** MiniMax's M3.1 family is one of the most underrated models out there — 512K context with solid reasoning. But the MiniMax ecosystem is thin on integrations: nobody has wired it into the routing layer the way DeepSeek and GLM got. This plugin is a working bridge from your existing subscription to any agent, powered by [magpie](https://github.com/yetone/magpie).
 
-## 在 magpie 中使用 / Using it in magpie
+## 最简单的用法：在 magpie 里一键安装 / The easy way: install inside magpie
 
-**1. 安装插件并登录**（二选一，认的是同一个账号）：
+1. 打开 magpie 窗口，切到**插件** tab
+2. 在底部的安装框里输入仓库地址（`npm 包名、GitHub 仓库（github:owner/repo）或本机文件夹`那个框）：
+
+   ```
+   github:tbkgktsymv-ux/opencode-mcode-auth
+   ```
+
+   点**安装**
+3. 在插件里点**登录**，选一种方式（推荐"MiniMax Code 桌面端登录"，没有桌面端就选"网页登录"）
+4. 完成。到任意 agent 的模型下拉里选 `mcode/MiniMax-M3.1-Flash-Preview` 就能用了；插件 tab 里还能看到**周额度用量**，额度将尽时自动换账号
+
+命令行等价操作：
 
 ```sh
 magpie plugin add github:tbkgktsymv-ux/opencode-mcode-auth
-
-# 方式一：沿用 MiniMax Code 桌面端已登录的账号（推荐，token 自动续期）
 magpie plugin login mcode
-
-# 方式二：网页登录（没有桌面端时用，magpie 自动打开登录页）
-magpie plugin login mcode mcode
+magpie codex mcode/MiniMax-M3.1-Flash-Preview   # 把 M3.1 选给 Codex（其他 agent 同理）
 ```
 
-**2. 把 M3.1 选给任意 agent**：
+## 进阶用法 / More
 
-```sh
-# 命令行
-magpie codex mcode/MiniMax-M3.1-Flash-Preview        # Codex 用 M3.1
-magpie claude mcode/MiniMax-M3                        # Claude Code 用 M3
-magpie models                                         # 看所有 agent 能选到的模型
+- **看额度**：`magpie accounts` 或 magpie 界面，显示周额度用量和重置时间（与 MiniMax Code 桌面端同源）
+- **加账号**：`magpie accounts add mcode`（多账号额度用完自动切换）
+- **上下文窗口**：插件 tab 里选，或 `magpie model context mcode/MiniMax-M3.1-Flash-Preview 1m`
+- **推理档位**：`magpie codex effort high`（high / xhigh / max）
+- **路由组 / fallback**：
 
-# 或在 magpie 窗口里：插件 tab → MiniMax Code → 勾选模型（M3.1-Flash-Preview 等），
-# 然后在对应 agent 的模型下拉里选 mcode/MiniMax-M3.1-Flash-Preview
-```
-
-**3. 按需调上下文窗口和推理档位**：
-
-```sh
-# 上下文窗口（默认 256K，也可指定 128K / 1M 等）
-magpie model context mcode/MiniMax-M3.1-Flash-Preview 1m
-
-# 推理档位（high / xhigh / max）
-magpie codex effort high
-```
-
-**4. 看额度**：magpie 的账号列表（`magpie accounts` 或界面右上角）会显示**周额度用量**和重置时间，数据与 MiniMax Code 桌面端同源；额度将尽时 magpie 会按账号顺序自动切换。
-
-```sh
-magpie accounts          # 所有订阅的额度和重置时间
-magpie accounts add mcode   # 再加一个账号（可选）
-```
-
-**5. 进阶**：和别的模型组路由组、设 fallback——
-
-```sh
-magpie group add m31 models=mcode/MiniMax-M3.1-Flash-Preview,mcode/MiniMax-M3 routing=order
-magpie provider fallback mcode deepseek/deepseek-chat
-```
+  ```sh
+  magpie group add m31 models=mcode/MiniMax-M3.1-Flash-Preview,mcode/MiniMax-M3 routing=order
+  magpie provider fallback mcode deepseek/deepseek-chat
+  ```
 
 ## 模型 / Models
 
