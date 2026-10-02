@@ -225,6 +225,29 @@ function decodeClaims(token) {
   }
 }
 
+// fetchAccountInfo returns the MiniMax account's display name (and subject_id)
+// from the account API, so both desktop and browser sign-ins can share the same
+// accountId and magpie merges them into one. Returns null on failure.
+async function fetchAccountInfo(token, region) {
+  try {
+    const res = await fetch("https://api.minimax." + (region === "en" ? "io" : "cn") + "/backend/account", {
+      method: "GET",
+      headers: { Authorization: "Bearer " + token, Accept: "application/json" },
+      signal: AbortSignal.timeout(15000),
+    })
+    if (!res.ok) return null
+    const body = await res.json()
+    const info = body?.account_info
+    if (!info) return null
+    const name = typeof info.name === "string" && info.name ? info.name : ""
+    const phone = typeof info.phone === "string" ? info.phone : ""
+    const subjectId = typeof info.subject_id === "string" ? info.subject_id : ""
+    return { name, phone, subjectId }
+  } catch {
+    return null
+  }
+}
+
 // ---- signing in ---------------------------------------------------------------
 
 // desktopSignIn uses the account MiniMax Code is signed in to: nothing is
@@ -242,13 +265,18 @@ function desktopSignIn() {
           type: "failed",
           error: "本机 MiniMax Code 未登录（未找到 OAuth 记录），请先在 MiniMax Code 桌面端登录",
         }
+      // Resolve the real account name so both desktop and browser sign-ins
+      // share the same accountId and magpie merges them into one entry.
+      const info = await fetchAccountInfo(d.access, d.region)
+      const accountId = info?.name || info?.phone || ("MiniMax Code (" + d.region + ")")
       return {
         type: "success",
         refresh: "",
         access: "",
         expires: 0,
         source: "mcode-desktop",
-        accountId: "MiniMax Code (" + d.region + ")",
+        accountId,
+        ...(info?.subjectId ? { subjectId: info.subjectId } : {}),
       }
     },
   }
@@ -319,15 +347,18 @@ async function browserSignIn() {
           const status = r.body?.status || r.body?.error || ""
           if (r.ok && r.body?.access_token) {
             const g = grant(r.body, "")
-            const claims = decodeClaims(g.access)
+            // Resolve the real account name so this sign-in merges with the
+            // desktop one in magpie's account list.
+            const info = await fetchAccountInfo(g.access, region)
+            const accountId = info?.name || info?.phone || ("MiniMax 账号 (" + region + ")")
             return {
               type: "success",
               access: g.access,
               refresh: g.refresh,
               expires: Date.now() + g.expiresInSec * 1000,
               region,
-              accountId:
-                claims.account_id || claims.sub || "MiniMax 账号 (" + region + ")",
+              accountId,
+              ...(info?.subjectId ? { subjectId: info.subjectId } : {}),
             }
           }
           if (status === "authorization_pending") {
@@ -605,6 +636,57 @@ function makePlugin() {
             }
             return res
           },
+        }
+      },
+      // usage reports the account's remaining quota to magpie's account list,
+      // read from MiniMax's token-plan API (the same one the desktop app uses).
+      async usage(getAuth) {
+        const auth = await getAuth()
+        if (!auth) throw new Error("mcode 未登录")
+        // Resolve a fresh token (desktop's file or this account's stored one)
+        const a = await current(client, auth)
+        const region = a.region || "cn"
+        const host = "https://api.minimax." + (region === "en" ? "io" : "cn")
+        try {
+          const res = await fetch(host + "/backend/account/token_plan/remains_percent", {
+            method: "GET",
+            headers: { Authorization: "Bearer " + a.access, Accept: "application/json" },
+            signal: AbortSignal.timeout(15000),
+          })
+          if (!res.ok) throw new Error("HTTP " + res.status)
+          const body = await res.json()
+          const mr = Array.isArray(body?.model_remains) ? body.model_remains : []
+          const g = mr.find((x) => x?.model_name === "general") || mr[0]
+          if (!g) return { error: "未找到额度数据" }
+          // Build a weekly window from the API's fields
+          const usedPct = Math.max(0, Math.min(100,
+            g.current_weekly_used_percent
+              ? parseInt(g.current_weekly_used_percent, 10) || 0
+              : (g.current_weekly_total_count > 0
+                  ? Math.round((g.current_weekly_used_count / g.current_weekly_total_count) * 100)
+                  : 0)
+          ))
+          const weeklyEnd = typeof g.weekly_end_time === "number" ? g.weekly_end_time : 0
+          const weeklyStart = typeof g.weekly_start_time === "number" ? g.weekly_start_time : 0
+          const span = weeklyEnd && weeklyStart ? Math.floor((weeklyEnd - weeklyStart) / 1000) : 7 * 86400
+          // Also fetch account name for display
+          const info = await fetchAccountInfo(a.access, region)
+          return {
+            plan: "MiniMax Code Token Plan",
+            user: info?.name || "",
+            until: weeklyEnd ? new Date(weeklyEnd).toISOString() : "",
+            renew: "auto",
+            windows: [{
+              name: "周额度",
+              used: usedPct,
+              resetsAt: weeklyEnd || undefined,
+              resetSecs: weeklyEnd ? Math.max(0, Math.floor((weeklyEnd - Date.now()) / 1000)) : 0,
+              span,
+              display: usedPct + "%",
+            }],
+          }
+        } catch (e) {
+          return { error: "额度查询失败：" + (e?.message ?? String(e)) }
         }
       },
       methods: [
